@@ -46,9 +46,9 @@ public class MFCC {
     }
 
     public double[] computeFloatBuffer(byte[] byteBuffer) {
-        double[] floatbuffer = new double[1024];
+        double[] floatbuffer = new double[samplesPerFrame];
         int c = 0;
-        while (c < 1024) {
+        while (c < samplesPerFrame) {
             int index = c * 4;
             int first = byteBuffer[index];
             int second = byteBuffer[index + 1];
@@ -64,9 +64,9 @@ public class MFCC {
     }
 
     public double[] computeFloatBuffer(List<Byte> byteBuffer) {
-        double[] floatbuffer = new double[1024];
+        double[] floatbuffer = new double[samplesPerFrame];
         int c = 0;
-        while (c < 1024) {
+        while (c < samplesPerFrame) {
             int index = c * 4;
             int first = byteBuffer.get(index);
             int second = byteBuffer.get(index + 1);
@@ -86,7 +86,7 @@ public class MFCC {
             try{
                 File newFile = new File(filePath);
 
-                byte[] bytebuffer = new byte[4096];
+                byte[] bytebuffer = new byte[samplesPerFrame*4];
                 byte[] fileheader = new byte[44];
 
                 FileInputStream inStream = new FileInputStream(newFile);
@@ -109,8 +109,8 @@ public class MFCC {
         }else{
             List<Byte> temp = bytebuffer;
             while (temp.size() > 0){
-                List<Byte> singleframe = temp.subList(0, 4096);
-                temp = temp.subList(4096, temp.size());
+                List<Byte> singleframe = temp.subList(0, samplesPerFrame*4);
+                temp = temp.subList(samplesPerFrame*4, temp.size());
                 double[] floatbuffer = computeFloatBuffer(singleframe);
                 float[] mfcc = getMFCC(floatbuffer);
                 result.add(mfcc);
