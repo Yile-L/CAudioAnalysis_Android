@@ -1,5 +1,6 @@
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.sun.jmx.snmp.internal.SnmpSubSystem;
@@ -13,80 +14,53 @@ import static org.apache.commons.math3.transform.DftNormalization.UNITARY;
 import static org.apache.commons.math3.transform.TransformType.FORWARD;
 
 public class MFCC {
-
-    int samplesPerFrame;
+    int frameSize;
     int amountOfCepstrumCoef;
     int amountOfMelFilters;
     final float lowerFilterFreq = 133.3334f;
-    final float upperFilterFreq = 44100/2f;
+    final float upperFilterFreq = 44100 / 2f;
     final int sampleRate = 44100;
     int[] centerFrequencies;
-    List<Byte> bytebuffer;
-    List<float[]> result;
+    List<Short> audioData;
+    List<Double[]> result = new ArrayList<>();
 
     String filePath;
 
-    public MFCC(String File){
+    public MFCC(String File) {
         filePath = File;
-        samplesPerFrame = 1024;
+        audioData = null;
+        frameSize = 1024;
         amountOfCepstrumCoef = 30;
         amountOfMelFilters = 30;
     }
 
-    public MFCC(List<Byte> byteBuffer){
-        this(byteBuffer, 1024, 30, 30);
-        bytebuffer = byteBuffer;
+    public MFCC(List<Short> Data) {
+        this(Data, 1024, 30, 30);
 
     }
 
-    public MFCC(List<Byte> bytebuffer, int framsize, int MelFilters, int CepstrumCoef){
+    public MFCC(List<Short> Data, int samplesPerFrame) {
+        this(Data, samplesPerFrame, 30, 30);
+    }
+
+
+    public MFCC(List<Short> Data, int samplesPerFrame, int MelFilters, int CepstrumCoef) {
+        audioData = Data;
+        filePath = null;
         amountOfCepstrumCoef = CepstrumCoef;
         amountOfMelFilters = MelFilters;
-        samplesPerFrame = framsize;
+        frameSize = samplesPerFrame;
     }
 
-    public double[] computeFloatBuffer(byte[] byteBuffer) {
-        double[] floatbuffer = new double[samplesPerFrame];
-        int c = 0;
-        while (c < samplesPerFrame) {
-            int index = c * 4;
-            int first = byteBuffer[index];
-            int second = byteBuffer[index + 1];
-            int third = byteBuffer[index + 2];
-            int fourth = byteBuffer[index + 3];
-            float number = first + second * 256 + third * 256 * 256 + fourth * 256 * 256 * 256;
-            double pcmfloat = (number / (256 * 256 * 256 * 128));
-            floatbuffer[c] = pcmfloat;
-            c = c + 1;
-        }
 
-        return floatbuffer;
-    }
 
-    public double[] computeFloatBuffer(List<Byte> byteBuffer) {
-        double[] floatbuffer = new double[samplesPerFrame];
-        int c = 0;
-        while (c < samplesPerFrame) {
-            int index = c * 4;
-            int first = byteBuffer.get(index);
-            int second = byteBuffer.get(index + 1);
-            int third = byteBuffer.get(index + 2);
-            int fourth = byteBuffer.get(index + 3);
-            float number = first + second * 256 + third * 256 * 256 + fourth * 256 * 256 * 256;
-            double pcmfloat = (number / (256 * 256 * 256 * 128));
-            floatbuffer[c] = pcmfloat;
-            c = c + 1;
-        }
 
-        return floatbuffer;
-    }
-
-    public void Process(){
-        if (filePath != null){
-            try{
+    public void Process() {
+        if (filePath != null) {
+            try {
                 File newFile = new File(filePath);
 
-                byte[] bytebuffer = new byte[samplesPerFrame*4];
+                byte[] buffer = new byte[frameSize * 4];
                 byte[] fileheader = new byte[44];
 
                 FileInputStream inStream = new FileInputStream(newFile);
@@ -96,23 +70,27 @@ public class MFCC {
 
                 inStream.read(fileheader);
 
-                while ((nRead = inStream.read(bytebuffer)) != -1) {
-                    floatBuffer = computeFloatBuffer(bytebuffer);
-                    float[] mfcc = getMFCC(floatBuffer);
-                    for (float e : mfcc){
-
-                        System.out.println(e);
+                while ((nRead = inStream.read(buffer)) != -1) {
+                    floatBuffer = (new FloatBufferConverter(buffer)).result;
+                    Double[] mfcc = getMFCC(floatBuffer);
+                    for (double e:mfcc){
                     }
+                    result.add(mfcc);
                 }
 
-            }catch(Exception e){e.printStackTrace();}
-        }else{
-            List<Byte> temp = bytebuffer;
-            while (temp.size() > 0){
-                List<Byte> singleframe = temp.subList(0, samplesPerFrame*4);
-                temp = temp.subList(samplesPerFrame*4, temp.size());
-                double[] floatbuffer = computeFloatBuffer(singleframe);
-                float[] mfcc = getMFCC(floatbuffer);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else {
+            List<Short> temp = audioData;
+            while (temp.size() > 0) {
+                if (temp.size() < frameSize){
+                    break;
+                }
+                List<Short> singleframe = temp.subList(0, frameSize);
+                temp = temp.subList(frameSize, temp.size());
+                double[] floatbuffer = (new FloatBufferConverter(singleframe)).result;
+                Double[] mfcc = getMFCC(floatbuffer);
                 result.add(mfcc);
             }
         }
@@ -123,80 +101,77 @@ public class MFCC {
         return 0.54f - 0.46f * (float) Math.cos(2 * Math.PI * index / (length - 1));
     }
 
-    public float[] getMFCC(double[] floatBuffer) {
+    public Double[] getMFCC(double[] floatBuffer) {
 
         calculateFilterBanks();
         // Magnitude Spectrum
         FastFourierTransformer newTransform = new FastFourierTransformer(STANDARD);
 
-        for (int i=0; i<floatBuffer.length; i++){
-            floatBuffer[i] = floatBuffer[i]*HammingWindow(1024, i);
+        for (int i = 0; i < floatBuffer.length; i++) {
+            floatBuffer[i] = floatBuffer[i] * HammingWindow(1024, i);
         }
         Complex complex_bin[] = newTransform.transform(floatBuffer, FORWARD);
 
         double bin[] = new double[complex_bin.length];
-        for (int i=0; i<complex_bin.length; i++){
+        for (int i = 0; i < complex_bin.length; i++) {
             bin[i] = complex_bin[i].abs();
         }
 
         // get Mel Filterbank
         float fbank[] = melFilter(bin);
-        for (float e : centerFrequencies){
-            System.out.println(e);
-        }
         // Non-linear transformation
         float f[] = nonLinearTransformation(fbank);
         // Cepstral coefficients
-        float[] MFCC = DCT(f);
+        Double[] MFCC = DCT(f);
 
         return MFCC;
-        }
+    }
 
     public final void calculateFilterBanks() {
-        int points = amountOfMelFilters+2;
+        int points = amountOfMelFilters + 2;
         centerFrequencies = new int[points];
 
-        centerFrequencies[0] = Math.round(lowerFilterFreq / sampleRate * samplesPerFrame);
-        centerFrequencies[points-1] = Math.round(upperFilterFreq / sampleRate * samplesPerFrame);
+        centerFrequencies[0] = Math.round(lowerFilterFreq / sampleRate * frameSize);
+        centerFrequencies[points - 1] = Math.round(upperFilterFreq / sampleRate * frameSize);
 
         double lowerMel = freqToMel(lowerFilterFreq);
         double higherMel = freqToMel(upperFilterFreq);
 
 
-        float interval = (float)((higherMel - lowerMel) / (amountOfMelFilters + 1));
+        float interval = (float) ((higherMel - lowerMel) / (amountOfMelFilters + 1));
         for (int i = 1; i <= amountOfMelFilters; i++) {
-            float freq = (inverseMel(lowerMel + interval * i) / sampleRate) * samplesPerFrame;
-            centerFrequencies[i-1] = Math.round(freq);
+            float freq = (inverseMel(lowerMel + interval * i) / sampleRate) * frameSize;
+            centerFrequencies[i - 1] = Math.round(freq);
         }
 
     }
 
     private float inverseMel(double m) {
-        return (float) (700 * (Math.pow(10, m/2595) - 1));
+        return (float) (700 * (Math.pow(10, m / 2595) - 1));
     }
 
-    protected float freqToMel(float freq){
-        return (float) (1125 * Math.log(1 + freq/700));
+    protected float freqToMel(float freq) {
+        return (float) (1125 * Math.log(1 + freq / 700));
     }
 
     public float[] melFilter(double bin[]) {
         int amountOfMelFilters = 30;
-        float temp[] = new float[amountOfMelFilters+2];
+        float temp[] = new float[amountOfMelFilters + 2];
 
-        for (int k = 1; k<=amountOfMelFilters; k++) {
+        for (int k = 1; k <= amountOfMelFilters; k++) {
             float num1 = 0, num2 = 0;
 
-            float den = (centerFrequencies[k]-centerFrequencies[k-1]+1);
+            float den = (centerFrequencies[k] - centerFrequencies[k - 1] + 1);
 
-            for (int i = centerFrequencies[k-1]; i <= centerFrequencies[k]; i++) {
-                num1 += bin[i] * (i-centerFrequencies[k-1]+1);
+            for (int i = centerFrequencies[k - 1]; i <= centerFrequencies[k]; i++) {
+                num1 += bin[i] * (i - centerFrequencies[k - 1] + 1);
             }
             num1 /= den;
 
-            den = (centerFrequencies[k+1] - centerFrequencies[k] + 1);
+            den = (centerFrequencies[k + 1] - centerFrequencies[k] + 1);
 
-            for (int i = centerFrequencies[k]+1; i <= centerFrequencies[k+1]; i++) {
-                num2 += bin[i] * (1 - ((i - centerFrequencies[k])/den));
+            for (int i = centerFrequencies[k] + 1; i <= centerFrequencies[k + 1]; i++) {
+                num2 += bin[i] * (1 - ((i - centerFrequencies[k]) / den));
             }
 
 //            float denominator1 = (centerFrequencies[k]-centerFrequencies[k-1]);
@@ -212,24 +187,23 @@ public class MFCC {
 //            }
 //            num2 /= denominator2;
 
-            temp[k] = num1+num2;
+            temp[k] = num1 + num2;
         }
 
         float fbank[] = new float[amountOfMelFilters];
 
-        for (int i=0; i<amountOfMelFilters; i++) {
-            fbank[i] = temp[i+1];
+        for (int i = 0; i < amountOfMelFilters; i++) {
+            fbank[i] = temp[i + 1];
         }
 
         return fbank;
     }
 
 
-
-    public float[] nonLinearTransformation(float fbank[]){
+    public float[] nonLinearTransformation(float fbank[]) {
         float f[] = new float[fbank.length];
 
-        for (int i = 0; i < fbank.length; i++){
+        for (int i = 0; i < fbank.length; i++) {
             f[i] = (float) Math.log(fbank[i]);
 
         }
@@ -237,18 +211,24 @@ public class MFCC {
         return f;
     }
 
-    public float[] DCT(float f[]){
+    public Double[] DCT(float f[]) {
         int length = f.length;
-        float cepc[] = new float[amountOfCepstrumCoef];
+        Double cepc[] = new Double[amountOfCepstrumCoef];
 
-        for (int i = 0; i<amountOfCepstrumCoef; i++){
-            for (int j = 0; j<f.length; j++){
-                cepc[i] += f[j]*Math.cos(Math.PI*i/length*(j+0.5));
+        for (int i = 0; i < amountOfCepstrumCoef; i++) {
+            cepc[i] = 0.0;
+            for (int j = 0; j < length; j++) {
+                cepc[i] += f[j] * Math.cos(Math.PI * i / length * (j+ 0.5));
             }
         }
 
         return cepc;
     }
 }
+
+
+
+
+
 
 

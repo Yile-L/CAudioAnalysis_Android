@@ -7,23 +7,23 @@ import static java.lang.StrictMath.sin;
 
 public class ZeroCrossingRate {
     int frameSize;
-    final List<Byte> bytebuffer;
+    final List<Short> audioData;
     String FilePath;
     List<Double> result = new ArrayList<>();
 
     public ZeroCrossingRate(String File){
         frameSize=1024;
         FilePath = File;
-        bytebuffer = null;
+        audioData = null;
 
     }
-    public ZeroCrossingRate(List<Byte> byteBuffer){
-        this(byteBuffer, 1024);
+    public ZeroCrossingRate(List<Short> data){
+        this(data, 1024);
     }
 
-    public ZeroCrossingRate(List<Byte> byteBuffer, int samplesPerFrame){
+    public ZeroCrossingRate(List<Short> data, int samplesPerFrame){
         FilePath = null;
-        bytebuffer = byteBuffer;
+        audioData = data;
         frameSize = samplesPerFrame;
 
     }
@@ -50,10 +50,10 @@ public class ZeroCrossingRate {
                 }
             } catch (Exception e) {e.printStackTrace(); }
         } else{
-            List<Byte> temp = bytebuffer;
+            List<Short> temp = audioData;
             while (temp.size() > 0) {
-                List<Byte> singleframe = temp.subList(0, frameSize * 4);
-                temp = temp.subList(frameSize * 4, temp.size());
+                List<Short> singleframe = temp.subList(0, frameSize);
+                temp = temp.subList(frameSize, temp.size());
                 double[] floatbuffer = (new FloatBufferConverter(singleframe)).result;
                 double ZCR = getZCR(floatbuffer);
                 result.add(ZCR);
